@@ -193,9 +193,12 @@ export function simulateMatch(league: League, o: SimulateOptions): SimulatedMatc
   };
 
   const takeSample = () => {
+    const minute = Math.round(played / 60);
+    // A newer reading for the same minute replaces the older one, so (match, player, minute) stays unique.
+    while (fatigue.length > 0 && fatigue[fatigue.length - 1].minute === minute) fatigue.pop();
     for (const s of sides) {
       for (const p of s.field) {
-        fatigue.push({ matchId: o.matchId, playerId: p.id, minute: Math.round(played / 60), energy: round2(s.energy.get(p.id) ?? 0) });
+        fatigue.push({ matchId: o.matchId, playerId: p.id, minute, energy: round2(s.energy.get(p.id) ?? 0) });
       }
     }
   };

@@ -17,6 +17,7 @@ import { getServiceClient } from "../src/lib/db/client";
 import {
   eventToRow, fatigueToRow, lineupToRow, matchToRow, playerToRow, teamToRow,
 } from "../src/lib/db/mappers";
+import { withRetry } from "../src/lib/db/retry";
 import { roundRobin } from "../src/lib/simulator/fixtures";
 import { generateLeague } from "../src/lib/simulator/league";
 import { simulateMatch } from "../src/lib/simulator/match";
@@ -33,20 +34,22 @@ if (!Number.isInteger(ROUNDS) || ROUNDS < 1 || ROUNDS > 37) {
 
 let db: SupabaseClient | null = null;
 
-async function insert(table: string, rows: object[], chunk = 1000) {
+// "upsert" (not "insert") so that retrying after a dropped connection can never create duplicates.
+async function insert(table: string, rows: object[], chunk = 500) {
   if (!db) return;
+  const client = db;
   for (let i = 0; i < rows.length; i += chunk) {
-    const { error } = await db.from(table).insert(rows.slice(i, i + chunk));
-    if (error) throw new Error(`Insert into ${table} failed: ${error.message}`);
+    const part = rows.slice(i, i + chunk);
+    await withRetry(`insert into ${table}`, () => client.from(table).upsert(part));
   }
 }
 
 async function wipe() {
   if (!db) return;
   // Deleting matches also removes their lineups, events and fatigue samples (cascade).
+  const client = db;
   for (const table of ["matches", "players", "teams"]) {
-    const { error } = await db.from(table).delete().neq("id", "");
-    if (error) throw new Error(`Wiping ${table} failed: ${error.message}`);
+    await withRetry(`wipe ${table}`, () => client.from(table).delete().neq("id", ""));
   }
 }
 
@@ -61,7 +64,10 @@ async function main() {
 
   if (!DRY) {
     db = getServiceClient();
-    console.log("Wiping old data...");
+    const client = db;
+    console.log("Checking connection...");
+    await withRetry("connection check", () => client.from("teams").select("id").limit(1));
+    console.log("Connected. Wiping old data...");
     await wipe();
     await insert("teams", league.teams.map(teamToRow));
     await insert("players", league.players.map(playerToRow));
