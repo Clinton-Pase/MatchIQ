@@ -93,11 +93,17 @@ export function detectMoments(ctx: MatchContext, options: DetectOptions = {}): K
   };
 
   const moments: KeyMoment[] = [];
+  const usedIds = new Set<string>();
   const add = (m: Omit<KeyMoment, "id" | "matchId" | "minute" | "second" | "clock" | "score"> & { score: number }) => {
     const anchor = bySeq.get(m.seq)!;
+    // Ids must be unique (they key the evidence and the overlay). Two moments of the same type can share an
+    // event (e.g. a manager's call for each team), so the second one gets its team added.
+    let id = `${ctx.match.id}-mo-${m.type}-${m.seq}`;
+    for (let n = 2; usedIds.has(id); n++) id = `${ctx.match.id}-mo-${m.type}-${m.seq}-${m.teamId ?? "x"}${n > 2 ? n : ""}`;
+    usedIds.add(id);
     moments.push({
       ...m,
-      id: `${ctx.match.id}-mo-${m.type}-${m.seq}`,
+      id,
       matchId: ctx.match.id,
       minute: anchor.minute,
       second: anchor.second,

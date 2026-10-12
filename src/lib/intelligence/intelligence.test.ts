@@ -95,6 +95,13 @@ test("moments: evidence points at real events and anchors sit inside their range
   }
 });
 
+test("moments: every moment id is unique within a match", () => {
+  for (const sim of sims) {
+    const ids = detectMoments(context(sim)).map((m) => m.id);
+    assert.equal(new Set(ids).size, ids.length);
+  }
+});
+
 test("moments: results are in match order and identical on every run", () => {
   const ctx = context(sims[5]);
   const a = detectMoments(ctx);
